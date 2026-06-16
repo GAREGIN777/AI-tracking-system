@@ -120,76 +120,84 @@ fun MainContentScreen(
         if (currentUser == null) {
             RegistrationScreen(viewModel = viewModel, localizedContext = localizedContext, currentLang = currentLang)
         } else {
-            // Bento-themed Mode Switcher segment
-            RoleSelectorBar(
-                currentRole = currentRole,
-                onRoleChanged = { role -> viewModel.currentRole.value = role },
-                localizedContext = localizedContext
-            )
- 
-            if (isExpanded) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // Left interactive panel (User options / Driver dashboard)
-                    Box(
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (isExpanded) {
+                    Row(
                         modifier = Modifier
-                            .weight(4f)
-                            .fillMaxHeight()
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        if (currentRole == UserRole.PASSENGER) {
-                            PassengerPanel(viewModel = viewModel, selectionMode = selectionMode)
-                        } else {
-                            DriverPanel(viewModel = viewModel)
+                        // Left interactive panel (User options / Driver dashboard)
+                        Box(
+                            modifier = Modifier
+                                .weight(4f)
+                                .fillMaxHeight()
+                        ) {
+                            if (currentRole == UserRole.PASSENGER) {
+                                PassengerPanel(viewModel = viewModel, selectionMode = selectionMode)
+                            } else {
+                                DriverPanel(viewModel = viewModel)
+                            }
+                        }
+                        
+                        // Right map panel
+                        Box(
+                            modifier = Modifier
+                                .weight(6f)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(24.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                        ) {
+                            InteractiveMapView(viewModel = viewModel, selectionMode = selectionMode)
                         }
                     }
-                    
-                    // Right map panel
-                    Box(
+                } else {
+                    Column(
                         modifier = Modifier
-                            .weight(6f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(24.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                            .fillMaxSize()
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        InteractiveMapView(viewModel = viewModel, selectionMode = selectionMode)
-                    }
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Map bento piece
-                    Box(
-                        modifier = Modifier
-                            .weight(4.5f)
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
-                    ) {
-                        InteractiveMapView(viewModel = viewModel, selectionMode = selectionMode)
-                    }
+                        // Map bento piece
+                        Box(
+                            modifier = Modifier
+                                .weight(4.5f)
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(24.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                        ) {
+                            InteractiveMapView(viewModel = viewModel, selectionMode = selectionMode)
+                        }
  
-                    // Interaction console panel
-                    Box(
-                        modifier = Modifier
-                            .weight(5.5f)
-                            .fillMaxWidth()
-                    ) {
-                        if (currentRole == UserRole.PASSENGER) {
-                            PassengerPanel(viewModel = viewModel, selectionMode = selectionMode)
-                        } else {
-                            DriverPanel(viewModel = viewModel)
+                        // Interaction console panel
+                        Box(
+                            modifier = Modifier
+                                .weight(5.5f)
+                                .fillMaxWidth()
+                        ) {
+                            if (currentRole == UserRole.PASSENGER) {
+                                PassengerPanel(viewModel = viewModel, selectionMode = selectionMode)
+                            } else {
+                                DriverPanel(viewModel = viewModel)
+                            }
                         }
                     }
                 }
             }
+
+            val traffic by viewModel.currentTrafficLevel.collectAsStateWithLifecycle()
+            SandboxConsole(
+                currentRole = currentRole,
+                onRoleChanged = { role -> viewModel.currentRole.value = role },
+                traffic = traffic,
+                onTrafficChanged = { lvl -> viewModel.currentTrafficLevel.value = lvl },
+                localizedContext = localizedContext
+            )
         }
     }
 }
@@ -1215,50 +1223,7 @@ fun PassengerPanel(
                 }
             }
 
-            // TRAFFIC SIMULATING CONTROLLER BENTO CARD
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.3.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = localizedContext.getString(R.string.simulate_traffic),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            TrafficLevel.values().forEach { lvl ->
-                                val selected = traffic == lvl
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                                        .clickable { viewModel.currentTrafficLevel.value = lvl }
-                                        .padding(vertical = 8.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = lvl.name,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+
 
             // CAR TIERS SELECTOR ROW
             item {
@@ -1948,6 +1913,137 @@ fun RegistrationScreen(
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SandboxConsole(
+    currentRole: UserRole,
+    onRoleChanged: (UserRole) -> Unit,
+    traffic: TrafficLevel,
+    onTrafficChanged: (TrafficLevel) -> Unit,
+    localizedContext: android.content.Context
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (expanded) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f)
+        ),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                ),
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "🛠️ Yandex Sandbox Simulator Controls",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Text(
+                    text = if (expanded) "HIDE" else "SHOW",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            if (expanded) {
+                Spacer(modifier = Modifier.height(10.dp))
+                
+                Text(
+                    text = "In production, these tools are removed. Traffic congestion metrics, map routing, and driver dispatch calculations are synchronized in real-time under-the-hood with Yandex MapKit and Yandex Traffic APIs.",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(bottom = 10.dp)
+                )
+
+                androidx.compose.material3.HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f),
+                    thickness = 1.dp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Switch Role controls
+                Text(
+                    text = "Switch Sandbox Role Workspace:",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                
+                RoleSelectorBar(
+                    currentRole = currentRole,
+                    onRoleChanged = onRoleChanged,
+                    localizedContext = localizedContext
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Traffic Jam custom switcher controls
+                Text(
+                    text = "Simulate Live Traffic/Jams (Alters fares and ETA instantly):",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TrafficLevel.values().forEach { lvl ->
+                        val selected = traffic == lvl
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                .clickable { onTrafficChanged(lvl) }
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = lvl.name,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
