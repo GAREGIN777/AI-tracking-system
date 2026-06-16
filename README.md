@@ -106,6 +106,78 @@ trafficLayer.addTrafficListener(object : com.yandex.mapkit.traffic.TrafficListen
 
 ---
 
+## 🔥 Setting up Firebase Firestore Configuration
+
+This application comes with full **real-time Firebase backend synchronization** via `FirestoreHelper.kt`! It continuously uploads and updates:
+- Active order states and driver locations to the `"all_orders"` collection.
+- Passenger and Driver workspace user profiles to the `"users"` collection.
+
+By default, the simulation uses an in-memory fallback if Firestore is not initialized. To enable live database synchronization across physical devices or multiple emulators:
+
+### 1. Create a Firebase Project
+1. Go to the [Firebase Console](https://console.firebase.google.com/).
+2. Click **Add project** and follow the setup flow.
+3. Once the project is created, click the **Android icon** to add an Android App to the project.
+4. Provide the exact product package name: `com.aistudio.ordertracker.fbygxw` (as defined in `/app/build.gradle.kts`).
+5. Download your custom `google-services.json` file.
+
+### 2. Add `google-services.json` to the Project
+Place the downloaded `google-services.json` file into the `/app/` directory of your Android project structure:
+```text
+/your-project-root/
+└── app/
+    ├── src/
+    ├── build.gradle.kts
+    └── google-services.json   <--- PLACE FILE HERE
+```
+
+### 3. Add Google Services Plugin to Build Configuration
+To let the app parse the configurations, add the Google Services dependency rules.
+
+Add the plugin to your project-level `/build.gradle.kts`:
+```kotlin
+// In your root build.gradle.kts file:
+plugins {
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.google.devtools.ksp) apply false
+    alias(libs.plugins.roborazzi) apply false
+    alias(libs.plugins.secrets) apply false
+    id("com.google.gms.google-services") version "4.4.1" apply false // <-- Add this line
+}
+```
+
+Then apply the plugin in your app-level `/app/build.gradle.kts`:
+```kotlin
+// In your app-level build.gradle.kts file:
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.google.devtools.ksp)
+    alias(libs.plugins.roborazzi)
+    alias(libs.plugins.secrets)
+    id("com.google.gms.google-services") // <-- Add this line
+}
+```
+
+### 4. Setup Firestore Database & Rules
+1. In the Firestore console, click **Create database**.
+2. Select your test location.
+3. Access the **Rules** tab, and set permission rules to allow reads and writes (secure them accordingly for production deployment):
+   ```javascript
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /{document=**} {
+         allow read, write: if true; // Unsecured for fast prototyping/simulating
+       }
+     }
+   }
+   ```
+4. Run the app! It will initialize Firestore automatically and begin streaming ride events live over the cloud between drivers and passenger nodes.
+
+---
+
 ## 💾 Uploading and Committing Your Project to GitHub
 
 AI Studio handles secure, direct code syncing and versioning natively:
