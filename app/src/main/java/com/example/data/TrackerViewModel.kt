@@ -13,23 +13,36 @@ enum class UserRole {
     PASSENGER, DRIVER
 }
 
+data class UserProfile(
+    val name: String,
+    val phone: String,
+    val email: String,
+    val role: String, // PASSENGER or DRIVER
+    val vehicleModel: String? = null,
+    val vehicleColor: String? = null,
+    val licensePlate: String? = null,
+    val vehicleClass: String? = null // Economy, Comfort, Business, Cargo
+)
+
 class TrackerViewModel(application: Application) : AndroidViewModel(application) {
     private val database = AppDatabase.getDatabase(application)
     val repository = OrderRepository(database.orderDao())
 
     // UI States
+    val currentUser = MutableStateFlow<UserProfile?>(null)
     val currentRole = MutableStateFlow(UserRole.PASSENGER)
+    val currentLanguage = MutableStateFlow("en")
     val orders = repository.allOrders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val pendingOrders = repository.pendingOrders.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Selection details (Passenger view)
-    val pickupName = MutableStateFlow("Red Square & Kremlin")
-    val pickupLat = MutableStateFlow(55.7539)
-    val pickupLng = MutableStateFlow(37.6208)
+    val pickupName = MutableStateFlow("Republic Square")
+    val pickupLat = MutableStateFlow(40.1777)
+    val pickupLng = MutableStateFlow(44.5126)
 
-    val dropoffName = MutableStateFlow("Moscow City Financial")
-    val dropoffLat = MutableStateFlow(55.7483)
-    val dropoffLng = MutableStateFlow(37.5385)
+    val dropoffName = MutableStateFlow("Northern Avenue")
+    val dropoffLat = MutableStateFlow(40.1818)
+    val dropoffLng = MutableStateFlow(44.5147)
 
     val selectedCarType = MutableStateFlow("Comfort")
     val currentTrafficLevel = MutableStateFlow(TrafficLevel.MEDIUM)
@@ -39,8 +52,8 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
 
     // Driver specific status
     val driverOnline = MutableStateFlow(true)
-    val driverLat = MutableStateFlow(55.7762) // Initialized at Belorussky Train Station
-    val driverLng = MutableStateFlow(37.5812)
+    val driverLat = MutableStateFlow(40.1911) // Initialized at Cascade Complex
+    val driverLng = MutableStateFlow(44.5193)
 
     // Drive Navigation simulation variables
     private var simulationJob: Job? = null
@@ -50,6 +63,35 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     val navigationText = MutableStateFlow("Awaiting route accept...")
 
     init {
+        FirestoreHelper.initialize(application)
+        
+        // Restore user state from SharedPreferences
+        val sharedPrefs = application.getSharedPreferences("navigator_prefs", android.content.Context.MODE_PRIVATE)
+        val name = sharedPrefs.getString("user_name", "") ?: ""
+        val phone = sharedPrefs.getString("user_phone", "") ?: ""
+        val email = sharedPrefs.getString("user_email", "") ?: ""
+        val role = sharedPrefs.getString("user_role", "") ?: ""
+        
+        if (name.isNotEmpty() && phone.isNotEmpty() && role.isNotEmpty()) {
+            val vehicleModel = sharedPrefs.getString("driver_vehicle", null)
+            val vehicleColor = sharedPrefs.getString("driver_color", null)
+            val licensePlate = sharedPrefs.getString("driver_plate", null)
+            val vehicleClass = sharedPrefs.getString("driver_class", null)
+            
+            val profile = UserProfile(
+                name = name,
+                phone = phone,
+                email = email,
+                role = role,
+                vehicleModel = vehicleModel,
+                vehicleColor = vehicleColor,
+                licensePlate = licensePlate,
+                vehicleClass = vehicleClass
+            )
+            currentUser.value = profile
+            currentRole.value = if (role == "DRIVER") UserRole.DRIVER else UserRole.PASSENGER
+        }
+
         // Automatically check if there is an active order in the orders list that's not completed or cancelled
         viewModelScope.launch {
             orders.collect { orderList ->
@@ -69,18 +111,42 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun registerUser(profile: UserProfile) {
+        val sharedPrefs = getApplication<Application>().getSharedPreferences("navigator_prefs", android.content.Context.MODE_PRIVATE)
+        sharedPrefs.edit().apply {
+            putString("user_name", profile.name)
+            putString("user_phone", profile.phone)
+            putString("user_email", profile.email)
+            putString("user_role", profile.role)
+            putString("driver_vehicle", profile.vehicleModel)
+            putString("driver_color", profile.vehicleColor)
+            putString("driver_plate", profile.licensePlate)
+            putString("driver_class", profile.vehicleClass)
+            apply()
+        }
+        currentUser.value = profile
+        currentRole.value = if (profile.role == "DRIVER") UserRole.DRIVER else UserRole.PASSENGER
+        FirestoreHelper.syncUserProfile(profile)
+    }
+
+    fun logout() {
+        val sharedPrefs = getApplication<Application>().getSharedPreferences("navigator_prefs", android.content.Context.MODE_PRIVATE)
+        sharedPrefs.edit().clear().apply()
+        currentUser.value = null
+    }
+
     // Set pickup coordinates
     fun setPickup(lat: Double, lng: Double) {
         pickupLat.value = lat
         pickupLng.value = lng
-        pickupName.value = MapHelper.getClosestLabel(lat, lng)
+        pickupName.value = MapHelper.getClosestLabel(lat, lng, currentLanguage.value)
     }
 
     // Set dropoff coordinates
     fun setDropoff(lat: Double, lng: Double) {
         dropoffLat.value = lat
         dropoffLng.value = lng
-        dropoffName.value = MapHelper.getClosestLabel(lat, lng)
+        dropoffName.value = MapHelper.getClosestLabel(lat, lng, currentLanguage.value)
     }
 
     // Reset current pickup/dropoff selections
@@ -120,6 +186,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             val id = repository.insertOrder(order)
             val insertedOrder = order.copy(id = id)
             activeOrder.value = insertedOrder
+            FirestoreHelper.syncOrder(insertedOrder)
             Log.d("TrackerViewModel", "Created Order: $insertedOrder")
         }
     }
@@ -140,6 +207,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             )
             repository.updateOrder(updated)
             activeOrder.value = updated
+            FirestoreHelper.syncOrder(updated)
             startVehicleSimulation(updated)
         }
     }
@@ -151,6 +219,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             val updated = order.copy(status = "ARRIVED")
             repository.updateOrder(updated)
             activeOrder.value = updated
+            FirestoreHelper.syncOrder(updated)
             navigationText.value = "Arrived at Pickup. Waiting for customer..."
         }
     }
@@ -162,6 +231,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             val updated = order.copy(status = "IN_PROGRESS")
             repository.updateOrder(updated)
             activeOrder.value = updated
+            FirestoreHelper.syncOrder(updated)
             startJourneySimulation(updated)
         }
     }
@@ -177,6 +247,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
 
             val updated = order.copy(status = "CANCELLED")
             repository.updateOrder(updated)
+            FirestoreHelper.syncOrder(updated)
             activeOrder.value = null
         }
     }
@@ -185,6 +256,7 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
     fun clearHistory() {
         viewModelScope.launch {
             repository.clearAll()
+            FirestoreHelper.clearAllOrdersFromFirestore()
             activeOrder.value = null
         }
     }
@@ -212,10 +284,14 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                 currentRouteStepIndex.value = i
 
                 // Update server side / db representation with current vehicle position
-                activeOrder.value = activeOrder.value?.copy(
+                val current = activeOrder.value?.copy(
                     driverLat = coord.first,
                     driverLng = coord.second
                 )
+                activeOrder.value = current
+                if (current != null) {
+                    FirestoreHelper.syncOrder(current)
+                }
 
                 val dist = MapHelper.getDistanceKm(coord.first, coord.second, order.pickupLat, order.pickupLng)
                 if (dist < 0.2) {
@@ -257,6 +333,9 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
                     driverLng = coord.second
                 )
                 activeOrder.value = updatedOrder
+                if (updatedOrder != null) {
+                    FirestoreHelper.syncOrder(updatedOrder)
+                }
 
                 val dist = MapHelper.getDistanceKm(coord.first, coord.second, order.dropoffLat, order.dropoffLng)
                 val remainingMins = MapHelper.estimateTravelTimeMinutes(dist, currentTrafficLevel.value)
@@ -270,11 +349,18 @@ class TrackerViewModel(application: Application) : AndroidViewModel(application)
             val finalOrder = activeOrder.value?.copy(status = "COMPLETED")
             if (finalOrder != null) {
                 repository.updateOrder(finalOrder)
+                FirestoreHelper.syncOrder(finalOrder)
             }
             activeOrder.value = null
             isSimulating.value = false
             simulationRoute.value = emptyList()
             simulationJob = null
         }
+    }
+
+    fun setLanguage(langCode: String) {
+        currentLanguage.value = langCode
+        pickupName.value = MapHelper.getClosestLabel(pickupLat.value, pickupLng.value, langCode)
+        dropoffName.value = MapHelper.getClosestLabel(dropoffLat.value, dropoffLng.value, langCode)
     }
 }

@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MyApplicationTheme {
+            MyApplicationTheme(darkTheme = false) {
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     contentWindowInsets = WindowInsets.safeDrawing
@@ -86,10 +86,20 @@ fun MainContentScreen(
 ) {
     val context = LocalContext.current
     val currentRole by viewModel.currentRole.collectAsStateWithLifecycle()
+    val currentLang by viewModel.currentLanguage.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
     val configuration = LocalConfiguration.current
     val isExpanded = configuration.screenWidthDp >= 600
     val selectionMode = remember { mutableStateOf("pickup") }
-
+ 
+    val localizedContext = remember(currentLang) {
+        val locale = java.util.Locale(currentLang)
+        java.util.Locale.setDefault(locale)
+        val config = android.content.res.Configuration(context.resources.configuration)
+        config.setLocale(locale)
+        context.createConfigurationContext(config)
+    }
+ 
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -97,76 +107,86 @@ fun MainContentScreen(
     ) {
         // Welcoming top branding bar
         TopActionRow(
+            currentLanguage = currentLang,
+            onLanguageCodeChanged = { viewModel.setLanguage(it) },
             currentRole = currentRole,
             onRoleChanged = { role -> viewModel.currentRole.value = role },
-            onClearHistory = { viewModel.clearHistory() }
+            onClearHistory = { viewModel.clearHistory() },
+            currentUser = currentUser,
+            onLogout = { viewModel.logout() },
+            localizedContext = localizedContext
         )
-
-        // Bento-themed Mode Switcher segment
-        RoleSelectorBar(
-            currentRole = currentRole,
-            onRoleChanged = { role -> viewModel.currentRole.value = role }
-        )
-
-        if (isExpanded) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Left interactive panel (User options / Driver dashboard)
-                Box(
+ 
+        if (currentUser == null) {
+            RegistrationScreen(viewModel = viewModel, localizedContext = localizedContext, currentLang = currentLang)
+        } else {
+            // Bento-themed Mode Switcher segment
+            RoleSelectorBar(
+                currentRole = currentRole,
+                onRoleChanged = { role -> viewModel.currentRole.value = role },
+                localizedContext = localizedContext
+            )
+ 
+            if (isExpanded) {
+                Row(
                     modifier = Modifier
-                        .weight(4f)
-                        .fillMaxHeight()
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (currentRole == UserRole.PASSENGER) {
-                        PassengerPanel(viewModel = viewModel, selectionMode = selectionMode)
-                    } else {
-                        DriverPanel(viewModel = viewModel)
+                    // Left interactive panel (User options / Driver dashboard)
+                    Box(
+                        modifier = Modifier
+                            .weight(4f)
+                            .fillMaxHeight()
+                    ) {
+                        if (currentRole == UserRole.PASSENGER) {
+                            PassengerPanel(viewModel = viewModel, selectionMode = selectionMode)
+                        } else {
+                            DriverPanel(viewModel = viewModel)
+                        }
+                    }
+                    
+                    // Right map panel
+                    Box(
+                        modifier = Modifier
+                            .weight(6f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                    ) {
+                        InteractiveMapView(viewModel = viewModel, selectionMode = selectionMode)
                     }
                 }
-                
-                // Right map panel
-                Box(
+            } else {
+                Column(
                     modifier = Modifier
-                        .weight(6f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(24.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                        .fillMaxSize()
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    InteractiveMapView(viewModel = viewModel, selectionMode = selectionMode)
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                // Map bento piece
-                Box(
-                    modifier = Modifier
-                        .weight(4.5f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(24.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
-                ) {
-                    InteractiveMapView(viewModel = viewModel, selectionMode = selectionMode)
-                }
-
-                // Interaction console panel
-                Box(
-                    modifier = Modifier
-                        .weight(5.5f)
-                        .fillMaxWidth()
-                ) {
-                    if (currentRole == UserRole.PASSENGER) {
-                        PassengerPanel(viewModel = viewModel, selectionMode = selectionMode)
-                    } else {
-                        DriverPanel(viewModel = viewModel)
+                    // Map bento piece
+                    Box(
+                        modifier = Modifier
+                            .weight(4.5f)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
+                    ) {
+                        InteractiveMapView(viewModel = viewModel, selectionMode = selectionMode)
+                    }
+ 
+                    // Interaction console panel
+                    Box(
+                        modifier = Modifier
+                            .weight(5.5f)
+                            .fillMaxWidth()
+                    ) {
+                        if (currentRole == UserRole.PASSENGER) {
+                            PassengerPanel(viewModel = viewModel, selectionMode = selectionMode)
+                        } else {
+                            DriverPanel(viewModel = viewModel)
+                        }
                     }
                 }
             }
@@ -176,9 +196,14 @@ fun MainContentScreen(
 
 @Composable
 fun TopActionRow(
+    currentLanguage: String,
+    onLanguageCodeChanged: (String) -> Unit,
     currentRole: UserRole,
     onRoleChanged: (UserRole) -> Unit,
-    onClearHistory: () -> Unit
+    onClearHistory: () -> Unit,
+    currentUser: com.example.data.UserProfile?,
+    onLogout: () -> Unit,
+    localizedContext: android.content.Context
 ) {
     Row(
         modifier = Modifier
@@ -205,13 +230,13 @@ fun TopActionRow(
             Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
-                    text = "Welcome back, guest",
+                    text = if (currentUser != null) "${currentUser.role}: ${currentUser.phone}" else localizedContext.getString(R.string.welcome_back),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = "Yandex-Link",
+                    text = currentUser?.name ?: "Yerevan Navigator",
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = (-0.5).sp
@@ -221,19 +246,105 @@ fun TopActionRow(
             }
         }
 
-        IconButton(
-            onClick = onClearHistory,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surface)
-                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), CircleShape)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Refresh,
-                contentDescription = "Reset Logs",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            var expanded by remember { mutableStateOf(false) }
+            val langLabel = when (currentLanguage) {
+                "hy" -> "🇦🇲 HY"
+                "ru" -> "🇷🇺 RU"
+                else -> "🇺🇸 EN"
+            }
+
+            Box(modifier = Modifier.wrapContentSize()) {
+                Button(
+                    onClick = { expanded = true },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier
+                        .height(38.dp)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            RoundedCornerShape(12.dp)
+                        ),
+                    contentPadding = PaddingValues(horizontal = 10.dp)
+                ) {
+                    Text(text = langLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Select Language",
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("English 🇺🇸", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+                        onClick = {
+                            onLanguageCodeChanged("en")
+                            expanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Русский 🇷🇺", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+                        onClick = {
+                            onLanguageCodeChanged("ru")
+                            expanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Հայերեն 🇦🇲", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+                        onClick = {
+                            onLanguageCodeChanged("hy")
+                            expanded = false
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            IconButton(
+                onClick = onClearHistory,
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Reset Logs",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            if (currentUser != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = onLogout,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+                        .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ExitToApp,
+                        contentDescription = "Logout",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
         }
     }
 }
@@ -242,6 +353,7 @@ fun TopActionRow(
 fun RoleSelectorBar(
     currentRole: UserRole,
     onRoleChanged: (UserRole) -> Unit,
+    localizedContext: android.content.Context,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -275,7 +387,7 @@ fun RoleSelectorBar(
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("User Mode", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(localizedContext.getString(R.string.user_mode), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -302,7 +414,7 @@ fun RoleSelectorBar(
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Driver Mode", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text(localizedContext.getString(R.string.driver_mode), fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -315,6 +427,16 @@ fun InteractiveMapView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val currentLang by viewModel.currentLanguage.collectAsStateWithLifecycle()
+
+    val localizedContext = remember(currentLang) {
+        val locale = java.util.Locale(currentLang)
+        java.util.Locale.setDefault(locale)
+        val config = android.content.res.Configuration(context.resources.configuration)
+        config.setLocale(locale)
+        context.createConfigurationContext(config)
+    }
+
     val pickupLat by viewModel.pickupLat.collectAsStateWithLifecycle()
     val pickupLng by viewModel.pickupLng.collectAsStateWithLifecycle()
     val dropoffLat by viewModel.dropoffLat.collectAsStateWithLifecycle()
@@ -326,6 +448,7 @@ fun InteractiveMapView(
 
     val activeOrder by viewModel.activeOrder.collectAsStateWithLifecycle()
     val routePoints by viewModel.simulationRoute.collectAsStateWithLifecycle()
+    val selectedCarType by viewModel.selectedCarType.collectAsStateWithLifecycle()
 
     val density = LocalDensity.current.density
 
@@ -353,10 +476,11 @@ fun InteractiveMapView(
 
         // Adaptive themed colors for the Map canvas
         val isLightTheme = MaterialTheme.colorScheme.primary == BentoPrimaryLight
-        val groundColor = if (isLightTheme) Color(0xFFE6E0E9) else Color(0xFF1B1A21)
+        val groundColor = if (isLightTheme) Color(0xFFF1F3F4) else Color(0xFF1B1A21)
         val streetBaseColor = if (isLightTheme) Color(0xFFFFFFFF) else Color(0xFF2B2E3C)
-        val gridColor = if (isLightTheme) Color(0xFFFFFFFF).copy(alpha = 0.5f) else Color(0xFF24222C)
-        val riverColor = if (isLightTheme) Color(0xFFC5D3ED) else Color(0xFF263C60).copy(alpha = 0.6f)
+        val gridColor = if (isLightTheme) Color(0xFFE2E4E7).copy(alpha = 0.4f) else Color(0xFF24222C)
+        val riverColor = if (isLightTheme) Color(0xFFADD8E6) else Color(0xFF263C60).copy(alpha = 0.6f)
+        val parkColor = if (isLightTheme) Color(0xFFC8E6C9).copy(alpha = 0.6f) else Color(0xFF1E3322).copy(alpha = 0.4f)
 
         Canvas(
             modifier = Modifier
@@ -385,14 +509,26 @@ fun InteractiveMapView(
                 drawLine(gridColor, Offset(0f, y), Offset(size.width, y), 1.5f)
             }
 
-            // Draw Moskva River representing geographic curve
+            // Draw English Park
+            val englishParkPos = toCanvasOffset(40.1741, 44.5074, size.width, size.height)
+            drawCircle(parkColor, radius = 40f * density, center = englishParkPos)
+
+            // Draw Victory Park (includes lake and greenery)
+            val victoryParkPos = toCanvasOffset(40.1960, 44.5230, size.width, size.height)
+            drawCircle(parkColor, radius = 55f * density, center = victoryParkPos)
+
+            // Draw Lovers' Park
+            val loversParkPos = toCanvasOffset(40.1920, 44.5035, size.width, size.height)
+            drawCircle(parkColor, radius = 30f * density, center = loversParkPos)
+
+            // Draw Hrazdan River representing geographic curve of Yerevan
             val riverLinePoints = listOf(
-                55.7031 to 37.5112,
-                55.7158 to 37.5436,
-                55.7294 to 37.5915,
-                55.7414 to 37.6208,
-                55.7539 to 37.6450,
-                55.7600 to 37.6800
+                40.2180 to 44.4550,
+                40.2030 to 44.4680,
+                40.1880 to 44.4750,
+                40.1780 to 44.4720,
+                40.1690 to 44.4710,
+                40.1550 to 44.4820
             )
             val riverPath = Path()
             val firstRiverOffset = toCanvasOffset(riverLinePoints[0].first, riverLinePoints[0].second, size.width, size.height)
@@ -453,6 +589,11 @@ fun InteractiveMapView(
         // Standard landmarks mapping labels
         MapHelper.landmarks.forEach { l ->
             val pos = toCanvasOffset(l.lat, l.lng, widthPx, heightPx)
+            val localizedName = when (currentLang) {
+                "hy" -> l.nameHy
+                "ru" -> l.nameRu
+                else -> l.nameEn
+            }
             Box(
                 modifier = Modifier
                     .offset(
@@ -467,7 +608,7 @@ fun InteractiveMapView(
             ) {
                 Icon(
                     imageVector = Icons.Default.Star,
-                    contentDescription = l.name,
+                    contentDescription = localizedName,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(10.dp)
                 )
@@ -479,7 +620,7 @@ fun InteractiveMapView(
                         .padding(horizontal = 5.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = l.name.substringBefore(" "),
+                        text = localizedName.substringBefore(" "),
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         fontSize = 7.5.sp,
                         fontWeight = FontWeight.Bold
@@ -514,24 +655,49 @@ fun InteractiveMapView(
             Text("B", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
         }
 
-        // Driver moving vehicle (Yellow arrow indicator)
+        // Driver moving vehicle (Class-specific custom visual tracking indicator)
         if (driverOnline) {
             val dPos = toCanvasOffset(driverLat, driverLng, widthPx, heightPx)
+            val (carBg, iconHex, carClassLabel) = when (selectedCarType) {
+                "Economy" -> Triple(Color(0xFF10B981), Color.White, "Eco 🍀")
+                "Comfort" -> Triple(Color(0xFF3B82F6), Color.White, "Comfort 🚗")
+                "Business" -> Triple(Color(0xFF8B5CF6), Color.White, "Biz 💎")
+                "Cargo" -> Triple(Color(0xFFF59E0B), Color.Black, "Cargo 🚚")
+                else -> Triple(Color(0xFFFBBF24), Color.Black, "Car")
+            }
+
             Box(
                 modifier = Modifier
-                    .offset(x = (dPos.x / density - 14).dp, y = (dPos.y / density - 14).dp)
-                    .shadow(6.dp, CircleShape)
-                    .background(Color(0xFFFBBF24), CircleShape)
-                    .border(2.dp, Color.White, CircleShape)
-                    .size(28.dp),
+                    .offset(x = (dPos.x / density - 35).dp, y = (dPos.y / density - 16).dp)
+                    .shadow(6.dp, RoundedCornerShape(12.dp))
+                    .background(carBg, RoundedCornerShape(12.dp))
+                    .border(2.dp, Color.White, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Driver",
-                    tint = Color.Black,
-                    modifier = Modifier.size(16.dp)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = when (selectedCarType) {
+                            "Economy" -> Icons.Default.ThumbUp
+                            "Comfort" -> Icons.Default.Star
+                            "Business" -> Icons.Default.Favorite
+                            "Cargo" -> Icons.Default.ShoppingCart
+                            else -> Icons.Default.PlayArrow
+                        },
+                        contentDescription = "Car Class Icon",
+                        tint = iconHex,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = carClassLabel,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = iconHex
+                    )
+                }
             }
         }
 
@@ -562,7 +728,7 @@ fun InteractiveMapView(
                         )
                 )
                 Text(
-                    text = "Live Traffic: ${traffic.name.lowercase().replaceFirstChar { it.uppercase() }}",
+                    text = localizedContext.getString(R.string.live_traffic, traffic.name.lowercase().replaceFirstChar { it.uppercase() }),
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
@@ -580,9 +746,9 @@ fun InteractiveMapView(
                 .clip(RoundedCornerShape(14.dp))
                 .background(MaterialTheme.colorScheme.primary)
                 .clickable {
-                    // Center onto city center (Red Square)
+                    // Center onto city center (Red/Republic Square)
                     viewModel.setPickup(MapHelper.CENTER_LAT, MapHelper.CENTER_LNG)
-                    Toast.makeText(context, "Centered to Red Square", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(localizedContext, localizedContext.getString(R.string.centered_to_red_square), Toast.LENGTH_SHORT).show()
                 },
             contentAlignment = Alignment.Center
         ) {
@@ -638,6 +804,16 @@ fun PassengerPanel(
     val dropoffLat by viewModel.dropoffLat.collectAsStateWithLifecycle()
     val dropoffLng by viewModel.dropoffLng.collectAsStateWithLifecycle()
 
+    var pickupQuery by remember { mutableStateOf(pickupName) }
+    var dropoffQuery by remember { mutableStateOf(dropoffName) }
+
+    LaunchedEffect(pickupName) {
+        pickupQuery = pickupName
+    }
+    LaunchedEffect(dropoffName) {
+        dropoffQuery = dropoffName
+    }
+
     val carType by viewModel.selectedCarType.collectAsStateWithLifecycle()
     val traffic by viewModel.currentTrafficLevel.collectAsStateWithLifecycle()
     val activeOrder by viewModel.activeOrder.collectAsStateWithLifecycle()
@@ -645,6 +821,17 @@ fun PassengerPanel(
     val navigationText by viewModel.navigationText.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    val currentLang by viewModel.currentLanguage.collectAsStateWithLifecycle()
+
+    val localizedContext = remember(currentLang) {
+        val locale = java.util.Locale(currentLang)
+        java.util.Locale.setDefault(locale)
+        val config = android.content.res.Configuration(context.resources.configuration)
+        config.setLocale(locale)
+        context.createConfigurationContext(config)
+    }
+
+    val currencySymbol = if (currentLang == "hy") "֏" else "₽"
     val dist = MapHelper.getDistanceKm(pickupLat, pickupLng, dropoffLat, dropoffLng)
 
     LazyColumn(
@@ -658,7 +845,7 @@ fun PassengerPanel(
         item {
             Column {
                 Text(
-                    text = "SELECT PIN CONVENIENT SPOTS",
+                    text = localizedContext.getString(R.string.convenient_spots),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     fontWeight = FontWeight.Bold,
@@ -671,6 +858,11 @@ fun PassengerPanel(
                     listOf(MapHelper.landmarks[0], MapHelper.landmarks[1], MapHelper.landmarks[2]).forEach { l ->
                         val selected = (selectionMode.value == "pickup" && pickupLat == l.lat && pickupLng == l.lng) ||
                                        (selectionMode.value == "dropoff" && dropoffLat == l.lat && dropoffLng == l.lng)
+                        val localizedName = when (currentLang) {
+                            "hy" -> l.nameHy
+                            "ru" -> l.nameRu
+                            else -> l.nameEn
+                        }
                         Box(
                             modifier = Modifier
                                 .weight(1f)
@@ -685,7 +877,7 @@ fun PassengerPanel(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = l.name.substringBefore(" "),
+                                text = localizedName.substringBefore(" "),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -717,20 +909,20 @@ fun PassengerPanel(
                         ) {
                             Column {
                                 Text(
-                                    text = "ACTIVE ORDER",
+                                    text = localizedContext.getString(R.string.active_order),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = "STATUS: ${order.status}",
+                                    text = localizedContext.getString(R.string.order_status, order.status),
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 15.sp,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
                             }
                             Text(
-                                text = "${order.fare.toInt()} ₽",
+                                text = "${order.fare.toInt()} $currencySymbol",
                                 fontWeight = FontWeight.Black,
                                 fontSize = 20.sp,
                                 color = MaterialTheme.colorScheme.primary
@@ -740,7 +932,7 @@ fun PassengerPanel(
                         Spacer(modifier = Modifier.height(10.dp))
                         
                         Text(
-                            text = "Driver info: $navigationText",
+                            text = localizedContext.getString(R.string.driver_info, navigationText),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f)
                         )
@@ -758,7 +950,7 @@ fun PassengerPanel(
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(vertical = 10.dp)
                             ) {
-                                Text("Map Route", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(localizedContext.getString(R.string.map_route), color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                             Button(
                                 onClick = { MapHelper.launchYandexNavigator(context, order.dropoffLat, order.dropoffLng) },
@@ -767,7 +959,7 @@ fun PassengerPanel(
                                 modifier = Modifier.weight(1f),
                                 contentPadding = PaddingValues(vertical = 10.dp)
                             ) {
-                                Text("Yandex Navi", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text(localizedContext.getString(R.string.yandex_navi), color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                             IconButton(
                                 onClick = { viewModel.cancelOrder() },
@@ -825,7 +1017,7 @@ fun PassengerPanel(
                             }
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "AVG. WAIT",
+                                text = localizedContext.getString(R.string.avg_wait),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 fontWeight = FontWeight.Bold
@@ -868,14 +1060,14 @@ fun PassengerPanel(
                             }
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "EST. FARE",
+                                text = localizedContext.getString(R.string.est_fare),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 fontWeight = FontWeight.Bold
                             )
                             val farePrice = MapHelper.calculateFare(dist, carType, traffic)
                             Text(
-                                text = "${farePrice.toInt()} ₽",
+                                text = "${farePrice.toInt()} $currencySymbol",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.primary
@@ -895,74 +1087,105 @@ fun PassengerPanel(
                         .border(1.3.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(24.dp))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        // Row A (Pickup Address)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectionMode.value = "pickup" }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
+                        // Pickup Address typing field
+                        OutlinedTextField(
+                            value = pickupQuery,
+                            onValueChange = {
+                                pickupQuery = it
+                                selectionMode.value = "pickup"
+                            },
+                            label = { Text(localizedContext.getString(R.string.from_pickup), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            leadingIcon = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(Color(0xFF10B981), CircleShape)
+                                )
+                            }
+                        )
+
+                        // Autocomplete suggestions dynamic block
+                        val pickupSuggestions = MapHelper.searchYerevanAddress(pickupQuery)
+                        if (selectionMode.value == "pickup" && pickupSuggestions.isNotEmpty() && pickupQuery != pickupName) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)),
                                 modifier = Modifier
-                                    .size(10.dp)
-                                    .background(Color(0xFF10B981), CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                val labelColor = if (selectionMode.value == "pickup") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                Text(
-                                    text = "FROM (A) - PICKUP LOCATION",
-                                    fontSize = 8.5.sp,
-                                    color = labelColor,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = pickupName,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column {
+                                    pickupSuggestions.forEach { suggestion ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    viewModel.setPickup(suggestion.lat, suggestion.lng)
+                                                    pickupQuery = suggestion.getLabel(currentLang)
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                        ) {
+                                            Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Text(text = suggestion.getLabel(currentLang), style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    }
+                                }
                             }
                         }
 
-                        Divider(
-                            modifier = Modifier.padding(vertical = 10.dp),
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Destination Address typing field
+                        OutlinedTextField(
+                            value = dropoffQuery,
+                            onValueChange = {
+                                dropoffQuery = it
+                                selectionMode.value = "dropoff"
+                            },
+                            label = { Text(localizedContext.getString(R.string.to_destination), fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            leadingIcon = {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(Color(0xFFEF4444), CircleShape)
+                                )
+                            }
                         )
 
-                        // Row B (Destination Address)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectionMode.value = "dropoff" }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
+                        // Autocomplete suggestions dynamic block
+                        val dropoffSuggestions = MapHelper.searchYerevanAddress(dropoffQuery)
+                        if (selectionMode.value == "dropoff" && dropoffSuggestions.isNotEmpty() && dropoffQuery != dropoffName) {
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)),
                                 modifier = Modifier
-                                    .size(10.dp)
-                                    .background(Color(0xFFEF4444), CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                val labelColor = if (selectionMode.value == "dropoff") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                Text(
-                                    text = "TO (B) - DESTINATION SPOTS",
-                                    fontSize = 8.5.sp,
-                                    color = labelColor,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = dropoffName,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column {
+                                    dropoffSuggestions.forEach { suggestion ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    viewModel.setDropoff(suggestion.lat, suggestion.lng)
+                                                    dropoffQuery = suggestion.getLabel(currentLang)
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                                        ) {
+                                            Icon(imageVector = Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Text(text = suggestion.getLabel(currentLang), style = MaterialTheme.typography.bodyMedium)
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -983,7 +1206,7 @@ fun PassengerPanel(
                             )
                         ) {
                             Text(
-                                text = "BOOK RIDE • ${totalFare.toInt()} ₽",
+                                text = localizedContext.getString(R.string.book_ride, totalFare.toInt().toString()),
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 13.sp
                             )
@@ -1003,7 +1226,7 @@ fun PassengerPanel(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text(
-                            text = "SIMULATE CITY TRAFFIC DENSITY",
+                            text = localizedContext.getString(R.string.simulate_traffic),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             fontWeight = FontWeight.Bold,
@@ -1040,7 +1263,7 @@ fun PassengerPanel(
             // CAR TIERS SELECTOR ROW
             item {
                 Text(
-                    text = "SELECT VEHICLE COMFORT TIER",
+                    text = localizedContext.getString(R.string.vehicle_comfort),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     fontWeight = FontWeight.Bold,
@@ -1050,7 +1273,7 @@ fun PassengerPanel(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    listOf("Economy", "Comfort", "Business").forEach { tier ->
+                    listOf("Economy", "Comfort", "Business", "Cargo").forEach { tier ->
                         val selected = carType == tier
                         val estF = MapHelper.calculateFare(dist, tier, traffic)
 
@@ -1065,21 +1288,58 @@ fun PassengerPanel(
                                 .clickable { viewModel.selectedCarType.value = tier }
                         ) {
                             Column(
-                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 6.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
                                     text = tier,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "${estF.toInt()} ₽",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (selected) MaterialTheme.colorScheme.primary else Color.Gray
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
+                                Text(
+                                    text = "${estF.toInt()} $currencySymbol",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (selected) MaterialTheme.colorScheme.primary else Color.Gray,
+                                    maxLines = 1
+                                )
+                                
+                                val badgeText = when (tier) {
+                                    "Economy" -> "Low Cost"
+                                    "Comfort" -> "Popular"
+                                    "Business" -> "Premium"
+                                    "Cargo" -> "Cargo 🚚"
+                                    else -> ""
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .padding(top = 4.dp)
+                                        .background(
+                                            color = when (tier) {
+                                                "Economy" -> Color(0xFF10B981).copy(alpha = 0.15f)
+                                                "Comfort" -> Color(0xFF3B82F6).copy(alpha = 0.15f)
+                                                "Business" -> Color(0xFF8B5CF6).copy(alpha = 0.15f)
+                                                else -> Color(0xFFF59E0B).copy(alpha = 0.15f)
+                                            },
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = badgeText,
+                                        fontSize = 7.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when (tier) {
+                                            "Economy" -> Color(0xFF059669)
+                                            "Comfort" -> Color(0xFF2563EB)
+                                            "Business" -> Color(0xFF7C3AED)
+                                            else -> Color(0xFFD97706)
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1091,7 +1351,7 @@ fun PassengerPanel(
         if (loggedOrders.isNotEmpty()) {
             item {
                 Text(
-                    text = "STORED LOGS IN LOCAL ARCHIVE",
+                    text = localizedContext.getString(R.string.stored_logs),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     fontWeight = FontWeight.Bold,
@@ -1143,7 +1403,7 @@ fun PassengerPanel(
                             )
                         }
                         Text(
-                            text = "${log.fare.toInt()} ₽",
+                            text = "${log.fare.toInt()} $currencySymbol",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Black,
                             color = MaterialTheme.colorScheme.primary
@@ -1165,6 +1425,17 @@ fun DriverPanel(viewModel: TrackerViewModel) {
     val driverLng by viewModel.driverLng.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
+    val currentLang by viewModel.currentLanguage.collectAsStateWithLifecycle()
+
+    val localizedContext = remember(currentLang) {
+        val locale = java.util.Locale(currentLang)
+        java.util.Locale.setDefault(locale)
+        val config = android.content.res.Configuration(context.resources.configuration)
+        config.setLocale(locale)
+        context.createConfigurationContext(config)
+    }
+
+    val currencySymbol = if (currentLang == "hy") "֏" else "₽"
 
     LazyColumn(
         modifier = Modifier
@@ -1197,13 +1468,13 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                 ) {
                     Column {
                         Text(
-                            text = "SYSTEM ENGINE",
+                            text = localizedContext.getString(R.string.system_engine),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (driverOnline) Color(0xFF1B5E20) else Color.Gray,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (driverOnline) "DRIVER SYSTEM ACTIVE" else "DRIVER SYSTEM INACTIVE",
+                            text = if (driverOnline) localizedContext.getString(R.string.driver_system_active) else localizedContext.getString(R.string.driver_system_inactive),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = if (driverOnline) Color(0xFF2E7D32) else Color.DarkGray
@@ -1249,13 +1520,13 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "You are currently offline.",
+                            text = localizedContext.getString(R.string.offline_title),
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Toggle your status on to discover incoming live simulated dispatch requests.",
+                            text = localizedContext.getString(R.string.offline_desc),
                             color = Color.Gray,
                             fontSize = 11.sp,
                             textAlign = TextAlign.Center,
@@ -1277,13 +1548,13 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                             Text(
-                                "ACTIVE DISPATCH TASK", 
+                                text = localizedContext.getString(R.string.active_dispatch), 
                                 fontWeight = FontWeight.Bold, 
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                             )
                             Text(
-                                "${order.fare.toInt()} ₽", 
+                                text = "${order.fare.toInt()} $currencySymbol", 
                                 fontWeight = FontWeight.Black,
                                 fontSize = 16.sp,
                                 color = MaterialTheme.colorScheme.primary
@@ -1314,7 +1585,7 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("driver_arrived_pickup_btn")
                                 ) {
-                                    Text("ARRIVED AT PICKUP", fontWeight = FontWeight.Bold)
+                                    Text(localizedContext.getString(R.string.arrived_at_pickup), fontWeight = FontWeight.Bold)
                                 }
                             }
                             "ARRIVED" -> {
@@ -1324,7 +1595,7 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().testTag("driver_start_journey_btn")
                                 ) {
-                                    Text("PASSENGER BOARDED • START", fontWeight = FontWeight.Bold)
+                                    Text(localizedContext.getString(R.string.start_journey), fontWeight = FontWeight.Bold)
                                 }
                             }
                             "IN_PROGRESS" -> {
@@ -1345,7 +1616,7 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Open Navigator Quick Link", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(localizedContext.getString(R.string.navigator_quick_link), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -1355,7 +1626,7 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("REJECT DISPATCH TASK", color = Color.Red, fontWeight = FontWeight.Bold)
+                            Text(localizedContext.getString(R.string.reject_dispatch), color = Color.Red, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1363,7 +1634,7 @@ fun DriverPanel(viewModel: TrackerViewModel) {
         } else {
             item {
                 Text(
-                    text = "INCOMING ASSIGNMENT QUEUE", 
+                    text = localizedContext.getString(R.string.incoming_assignment), 
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     fontWeight = FontWeight.Bold,
@@ -1381,7 +1652,7 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                             .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f), RoundedCornerShape(24.dp))
                     ) {
                         Text(
-                            text = "No live tasks active. Switch to User Mode, select spots and press 'BOOK RIDE' to see live distribution!",
+                            text = localizedContext.getString(R.string.no_live_tasks),
                             fontSize = 11.sp, 
                             color = Color.Gray,
                             textAlign = TextAlign.Center,
@@ -1414,12 +1685,12 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                             ) {
                                 Column {
                                     Text(
-                                        text = "Class: ${pending.carType}",
+                                        text = localizedContext.getString(R.string.class_label, pending.carType),
                                         fontSize = 11.sp,
                                         color = Color.Gray
                                     )
                                     Text(
-                                        text = "${pending.fare.toInt()} ₽",
+                                        text = "${pending.fare.toInt()} $currencySymbol",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Black,
                                         color = MaterialTheme.colorScheme.primary
@@ -1435,11 +1706,248 @@ fun DriverPanel(viewModel: TrackerViewModel) {
                                         contentColor = MaterialTheme.colorScheme.onPrimary
                                     )
                                 ) {
-                                    Text("Accept", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(localizedContext.getString(R.string.accept_btn), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RegistrationScreen(
+    viewModel: TrackerViewModel,
+    localizedContext: android.content.Context,
+    currentLang: String
+) {
+    var selectedTab by remember { mutableStateOf("PASSENGER") }
+    
+    // Form fields
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    
+    // Driver fields
+    var vehicleModel by remember { mutableStateOf("") }
+    var vehicleColor by remember { mutableStateOf("") }
+    var licensePlate by remember { mutableStateOf("") }
+    var vehicleClass by remember { mutableStateOf("Economy") }
+    
+    var errorText by remember { mutableStateOf("") }
+    var classMenuExpanded by remember { mutableStateOf(false) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 500.dp)
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(48.dp)
+                )
+
+                Text(
+                    text = if (currentLang == "hy") "Միացեք Navigator Ցանցին" else if (currentLang == "ru") "Вступить в Сеть Навигатор" else "Join Navigator Network",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selectedTab == "PASSENGER") MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { selectedTab = "PASSENGER" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (currentLang == "hy") "Ուղևոր" else if (currentLang == "ru") "Пассажир" else "Passenger",
+                            fontWeight = FontWeight.Bold,
+                            color = if (selectedTab == "PASSENGER") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selectedTab == "DRIVER") MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { selectedTab = "DRIVER" },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (currentLang == "hy") "Վարորդ" else if (currentLang == "ru") "Водитель" else "Driver",
+                            fontWeight = FontWeight.Bold,
+                            color = if (selectedTab == "DRIVER") MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                if (errorText.isNotEmpty()) {
+                    Text(
+                        text = errorText,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; errorText = "" },
+                    label = { Text(if (currentLang == "hy") "Անուն" else if (currentLang == "ru") "Имя" else "Full Name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it; errorText = "" },
+                    label = { Text(if (currentLang == "hy") "Հեռախոսահամար" else if (currentLang == "ru") "Номер телефона" else "Phone Number") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it; errorText = "" },
+                    label = { Text("Email") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    singleLine = true
+                )
+
+                if (selectedTab == "DRIVER") {
+                    OutlinedTextField(
+                        value = vehicleModel,
+                        onValueChange = { vehicleModel = it; errorText = "" },
+                        label = { Text(if (currentLang == "hy") "Մեքենայի մոդել" else if (currentLang == "ru") "Модель машины" else "Car Model") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        singleLine = true
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = licensePlate,
+                            onValueChange = { licensePlate = it; errorText = "" },
+                            label = { Text(if (currentLang == "hy") "Պետհամարանիշ" else if (currentLang == "ru") "Госномер" else "License Plate") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = vehicleColor,
+                            onValueChange = { vehicleColor = it; errorText = "" },
+                            label = { Text(if (currentLang == "hy") "Գույն" else if (currentLang == "ru") "Цвет" else "Color") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+                    }
+
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = vehicleClass,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(if (currentLang == "hy") "Սակագին" else if (currentLang == "ru") "Класс" else "Service Class") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            trailingIcon = {
+                                IconButton(onClick = { classMenuExpanded = true }) {
+                                    Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null)
+                                }
+                            }
+                        )
+                        DropdownMenu(
+                            expanded = classMenuExpanded,
+                            onDismissRequest = { classMenuExpanded = false }
+                        ) {
+                            listOf("Economy", "Comfort", "Business", "Cargo").forEach { tier ->
+                                DropdownMenuItem(
+                                    text = { Text(tier) },
+                                    onClick = {
+                                        vehicleClass = tier
+                                        classMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        if (name.isBlank() || phone.isBlank() || email.isBlank()) {
+                            errorText = if (currentLang == "hy") "Խնդրում ենք լրացնել բոլոր դաշտերը" else if (currentLang == "ru") "Пожалуйста, заполните все поля" else "Please fill in all common fields"
+                        } else if (selectedTab == "DRIVER" && (vehicleModel.isBlank() || licensePlate.isBlank() || vehicleColor.isBlank())) {
+                            errorText = if (currentLang == "hy") "Մեքենայի տվյալները պարտադիր են" else if (currentLang == "ru") "Данные автомобиля обязательны" else "Vehicle details are required for drivers"
+                        } else {
+                            val profile = com.example.data.UserProfile(
+                                name = name,
+                                phone = phone,
+                                email = email,
+                                role = selectedTab,
+                                vehicleModel = if (selectedTab == "DRIVER") vehicleModel else null,
+                                vehicleColor = if (selectedTab == "DRIVER") vehicleColor else null,
+                                licensePlate = if (selectedTab == "DRIVER") licensePlate else null,
+                                vehicleClass = if (selectedTab == "DRIVER") vehicleClass else null
+                            )
+                            viewModel.registerUser(profile)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(
+                        text = if (currentLang == "hy") "Գրանցվել և Մուտք Գործել" else if (currentLang == "ru") "Зарегистрироваться и войти" else "Register & Enter",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium
+                    )
                 }
             }
         }
