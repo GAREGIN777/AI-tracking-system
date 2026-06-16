@@ -1,0 +1,6 @@
+{
+  "name": "Navigator Order Tracker",
+  "description": "Real-time order manager and simulation tracking database with integrated Yandex Maps support and physical navigation deep-links for users and drivers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
