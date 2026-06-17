@@ -176,6 +176,32 @@ plugins {
    ```
 4. Run the app! It will initialize Firestore automatically and begin streaming ride events live over the cloud between drivers and passenger nodes.
 
+## 🛠️ Local Android Studio Iguana 2023.2.1 Compatibility & Windows Cache Solutions
+
+This project was carefully refactored with backward-compatible dependencies:
+- **AGP version**: Configured to `8.3.2` which is the maximum fully-supported version for **Android Studio Iguana**.
+- **compileSdk & targetSdk**: Targets **API 35** (Android 15) utilizing stable gradle definitions rather than preview-level nested configurations.
+- **core-ktx**: Avoids compileSdk 36 constraints by using stable version `1.15.0`.
+- **gradle.properties**: Enables default `android.useAndroidX=true` and suppresses SDK mismatches with `android.suppressUnsupportedCompileSdk=35`.
+
+### Resolving Bouncy Castle (`bcprov-jdk18on-1.79.jar`) Extraction issues on Windows
+If you run into an extraction error like:
+`Failed to create Jar file C:\Users\<Name>\.gradle\caches\jars-9\...\bcprov-jdk18on-1.79.jar`
+
+This is a known Windows OS issue where file locks (usually caused by Windows Defender, security software, or multiple simultaneous Java/Gradle daemon instances) prevent Gradle from registering signed libraries inside its internal zip cache directory. Follow these quick steps to resolve it on your system:
+
+1. **Close Android Studio** and all Java/Kotlin development tasks.
+2. Open your terminal or powershell and run:
+   ```cmd
+   gradlew --stop
+   ```
+3. Locate active locked jar files by clearing your local Gradle transforms cache. In Windows File Explorer, navigate to:
+   `C:\Users\<YourUsername>\.gradle\caches\`
+   And delete the `jars-9` or `transforms-3` subdirectory inside files (Gradle will automatically regenerate them next time you build).
+4. **Configure exclusions inside Windows Defender / Antivirus**:
+   Exclude the directory `C:\Users\<YourUsername>\.gradle\` from real-time files scanning so Windows does not lock Gradle's zip extraction cycles.
+5. Restart **Android Studio Iguana** and click **Sync Project with Gradle Files**.
+
 ---
 
 ## 💾 Uploading and Committing Your Project to GitHub
