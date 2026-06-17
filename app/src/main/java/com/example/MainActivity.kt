@@ -192,6 +192,7 @@ fun MainContentScreen(
 
             val traffic by viewModel.currentTrafficLevel.collectAsStateWithLifecycle()
             SandboxConsole(
+                currentUser = currentUser,
                 currentRole = currentRole,
                 onRoleChanged = { role -> viewModel.currentRole.value = role },
                 traffic = traffic,
@@ -1921,6 +1922,7 @@ fun RegistrationScreen(
 
 @Composable
 fun SandboxConsole(
+    currentUser: com.example.data.UserProfile?,
     currentRole: UserRole,
     onRoleChanged: (UserRole) -> Unit,
     traffic: TrafficLevel,
@@ -1995,20 +1997,53 @@ fun SandboxConsole(
                 )
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Switch Role controls
+                // Active Registered Role read-only indicator
                 Text(
-                    text = "Switch Sandbox Role Workspace:",
+                    text = localizedContext.getString(R.string.active_workspace),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
                 
-                RoleSelectorBar(
-                    currentRole = currentRole,
-                    onRoleChanged = onRoleChanged,
-                    localizedContext = localizedContext
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (currentRole == UserRole.PASSENGER) Icons.Default.Person else Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (currentRole == UserRole.PASSENGER) 
+                                localizedContext.getString(R.string.user_mode) 
+                            else 
+                                localizedContext.getString(R.string.driver_mode),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Text(
+                        text = localizedContext.getString(R.string.locked_mode_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
 

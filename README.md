@@ -9,7 +9,7 @@ This application is customized for Yerevan, Armenia, supporting localized multi-
 ## 🛠️ Simulation to Production Mode Transfer
 
 To deliver a flawless, high-fidelity experience during review and prototyping, this app contains an active **Yandex Yerevan Sandbox Simulator Console** located at the bottom of the screen. 
-- In this review build, simulated metrics allow you to switch roles (Passenger vs. Driver) and alter traffic jam levels (1 to 10) in-memory to see how our custom routing and pricing calculations respond instantly.
+- In this review build, simulated metrics allow you to alter traffic jam levels (1 to 10) in-memory to see how our custom routing and pricing calculations respond instantly. For consistency, active roles are strictly bound to user accounts; to switch roles (Passenger vs. Driver), log out of the current profile first, and register/enter under the corresponding role on the welcome subscription screen.
 - In your live production build, these manual controls are disabled; traffic values, geocoded paths, and map drawing will be served directly by the official Yandex SDKs.
 
 ---

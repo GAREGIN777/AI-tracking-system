@@ -36,4 +36,6 @@
     <string name="driver_system_inactive">DRIVER SYSTEM INACTIVE</string>
     <string name="accept_btn">Accept</string>
     <string name="class_label">Class: %1$s</string>
+    <string name="active_workspace">Active Workspace:</string>
+    <string name="locked_mode_desc">(Locked to profile. Log out to switch)</string>
 </resources>

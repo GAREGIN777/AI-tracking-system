@@ -36,4 +36,6 @@
     <string name="driver_system_inactive">СИСТЕМА ВОДИТЕЛЯ НЕАКТИВНА</string>
     <string name="accept_btn">Принять</string>
     <string name="class_label">Класс: %1$s</string>
+    <string name="active_workspace">Активная сессия:</string>
+    <string name="locked_mode_desc">(Привязано к профилю. Выйдите для смены)</string>
 </resources>

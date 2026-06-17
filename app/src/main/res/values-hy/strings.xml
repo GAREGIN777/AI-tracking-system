@@ -36,4 +36,6 @@
     <string name="driver_system_inactive">ՎԱՐՈՐԴԻ ՀԱՄԱԿԱՐԳԸ ԱՆԱԿՏԻՎ Է</string>
     <string name="accept_btn">Ընդունել</string>
     <string name="class_label">Կարգ: %1$s</string>
+    <string name="active_workspace">Ակտիվ Տիրույթը:</string>
+    <string name="locked_mode_desc">(Կողպված է: Դուրս եկեք տեղափոխվելու համար)</string>
 </resources>
