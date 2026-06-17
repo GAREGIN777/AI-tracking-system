@@ -176,13 +176,14 @@ plugins {
    ```
 4. Run the app! It will initialize Firestore automatically and begin streaming ride events live over the cloud between drivers and passenger nodes.
 
-## 🛠️ Local Android Studio Iguana 2023.2.1 Compatibility & Windows Cache Solutions
+## 🛠️ Cutting-Edge Android 16 (API 36) Build & AGP 9.1.1 Configurations
 
-This project was carefully refactored with backward-compatible dependencies:
-- **AGP version**: Configured to `8.3.2` which is the maximum fully-supported version for **Android Studio Iguana**.
-- **compileSdk & targetSdk**: Targets **API 35** (Android 15) utilizing stable gradle definitions rather than preview-level nested configurations.
-- **core-ktx**: Avoids compileSdk 36 constraints by using stable version `1.15.0`.
-- **gradle.properties**: Enables default `android.useAndroidX=true` and suppresses SDK mismatches with `android.suppressUnsupportedCompileSdk=35`.
+This project is built using the absolute newest Android standards to ensure full compatibility with modern features and high-performance compilation:
+- **AGP version**: Configured to `9.1.1` for native integration and high-speed build caching.
+- **compileSdk & targetSdk**: Targets **Android 16 QPR (API 36)** using the modern `release(36)` compiler schema.
+- **core-ktx**: Utilizes newest `1.18.0` matching platform guidelines.
+- **Kotlin & JVM Compatibility**: Configured to compile tasks targeting **JVM 21** via the modern `compilerOptions` blocks to prevent duplicate class conflicts and guarantee seamless execution.
+- **gradle.properties**: Configured to support multi-language, dynamic assets, and build caching natively.
 
 ### Resolving Bouncy Castle (`bcprov-jdk18on-1.79.jar`) Extraction issues on Windows
 If you run into an extraction error like:
@@ -200,7 +201,7 @@ This is a known Windows OS issue where file locks (usually caused by Windows Def
    And delete the `jars-9` or `transforms-3` subdirectory inside files (Gradle will automatically regenerate them next time you build).
 4. **Configure exclusions inside Windows Defender / Antivirus**:
    Exclude the directory `C:\Users\<YourUsername>\.gradle\` from real-time files scanning so Windows does not lock Gradle's zip extraction cycles.
-5. Restart **Android Studio Iguana** and click **Sync Project with Gradle Files**.
+5. Restart your Android Studio and click **Sync Project with Gradle Files**.
 
 ---
 
