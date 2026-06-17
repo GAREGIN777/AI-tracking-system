@@ -25,10 +25,16 @@ class GreetingScreenshotTest {
   fun greeting_screenshot() {
     composeTestRule.setContent {
       MyApplicationTheme {
+        val context = androidx.compose.ui.platform.LocalContext.current
         TopActionRow(
+          currentLanguage = "en",
+          onLanguageCodeChanged = {},
           currentRole = UserRole.PASSENGER,
           onRoleChanged = {},
-          onClearHistory = {}
+          onClearHistory = {},
+          currentUser = null,
+          onLogout = {},
+          localizedContext = context
         )
       }
     }
